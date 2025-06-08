@@ -44,12 +44,10 @@ jobs:
             
             # Construct the search query with the date range
             QUERY="extension:rockspec created:$year-01-01..$year-12-31"
-
-            # print the query for debugging
-            echo "Using query: $QUERY"
             
             # Perform the search for the current year and append to a temp file
-            gh search code --limit 1000 --json repository -q "$QUERY" | jq -r '.[].repository.fullName' >> "$OUTPUT_FILE"
+            # The query is passed as a positional argument instead of using the -q flag to avoid potential shell parsing issues.
+            gh search code "$QUERY" --limit 1000 --json repository | jq -r '.[].repository.fullName' >> "$OUTPUT_FILE"
             
             # Sleep for a few seconds to respect API rate limits and avoid hitting them.
             # The search API has a lower rate limit (30 requests per minute for authenticated users).
