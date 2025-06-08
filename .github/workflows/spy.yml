@@ -1,0 +1,74 @@
+# GitHub Action to find repositories with a .rockspec file using a batching strategy
+
+name: Find All Lua Rocks Repositories
+
+on:
+  workflow_dispatch: # Allows manual triggering of the workflow
+  schedule:
+    - cron: '0 1 * * 0' # Runs every Sunday at 1 AM
+
+jobs:
+  find-rockspecs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up GitHub CLI
+        run: |
+          # The ubuntu-latest runner comes with gh pre-installed,
+          # but we ensure we are logged in to use the GITHUB_TOKEN.
+          # This gives us a higher rate limit than anonymous requests.
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Find and list repositories in batches
+        id: find_repos
+        run: |
+          # Use the GitHub CLI to search for repositories in yearly batches
+          # to get around the 1000-result limit per query.
+          # We loop from the current year back to 2008.
+          
+          START_YEAR=2008
+          CURRENT_YEAR=$(date +%Y)
+          OUTPUT_FILE="rockspec_repos_temp.txt"
+          FINAL_FILE="rockspec_repos.txt"
+          
+          echo "Starting batch search for repositories with .rockspec files..."
+          # Clear the temp file if it exists
+          > "$OUTPUT_FILE"
+
+          for (( year=$CURRENT_YEAR; year>=$START_YEAR; year-- )); do
+            echo "Searching for repositories created in $year..."
+            
+            # Construct the search query with the date range
+            QUERY="extension:rockspec created:$year-01-01..$year-12-31"
+            
+            # Perform the search for the current year and append to a temp file
+            gh search code --limit 1000 --json repository -q "$QUERY" | jq -r '.[].repository.fullName' >> "$OUTPUT_FILE"
+            
+            # Sleep for a few seconds to respect API rate limits and avoid hitting them.
+            # The search API has a lower rate limit (30 requests per minute for authenticated users).
+            echo "Waiting to avoid rate limits..."
+            sleep 5
+          done
+          
+          echo "Search complete. Consolidating and de-duplicating results..."
+          # Sort the list and remove duplicates, then save to the final file
+          sort -u "$OUTPUT_FILE" > "$FINAL_FILE"
+          rm "$OUTPUT_FILE"
+          
+          echo "Found $(wc -l < $FINAL_FILE) unique repositories."
+
+      - name: Show Results
+        run: |
+          echo "Showing the first 50 found repositories:"
+          head -n 50 rockspec_repos.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rockspec-repositories
+          path: rockspec_repos.txt
+
