@@ -44,6 +44,9 @@ jobs:
             
             # Construct the search query with the date range
             QUERY="extension:rockspec created:$year-01-01..$year-12-31"
+
+            # print the query for debugging
+            echo "Using query: $QUERY"
             
             # Perform the search for the current year and append to a temp file
             gh search code --limit 1000 --json repository -q "$QUERY" | jq -r '.[].repository.fullName' >> "$OUTPUT_FILE"
